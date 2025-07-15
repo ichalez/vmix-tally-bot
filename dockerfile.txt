@@ -1,0 +1,25 @@
+FROM node:18-alpine
+
+# Crear directorio de trabajo
+WORKDIR /app
+
+# Instalar dependencias del sistema para SQLite
+RUN apk add --no-cache python3 make g++
+
+# Copiar archivos de dependencias
+COPY package*.json ./
+
+# Instalar dependencias de Node.js
+RUN npm ci --only=production
+
+# Copiar código fuente
+COPY . .
+
+# Crear directorio para la base de datos
+RUN mkdir -p /app/data
+
+# Exponer puerto (opcional, para webhooks)
+EXPOSE 3000
+
+# Comando para ejecutar la aplicación
+CMD ["node", "bot.js"]
