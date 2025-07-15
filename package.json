@@ -5,16 +5,18 @@
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js",
-    "dev": "node bot.js"
+    "dev": "node bot.js",
+    "heroku-prebuild": "npm install --no-package-lock"
   },
   "dependencies": {
-    "telegraf": "^4.12.2",
-    "node-fetch": "^2.7.0",
-    "sqlite3": "^5.1.6",
-    "xml2js": "^0.6.2"
+    "telegraf": "4.12.2",
+    "node-fetch": "2.7.0",
+    "sqlite3": "5.1.6",
+    "xml2js": "0.6.2"
   },
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=16.0.0",
+    "npm": ">=6.0.0"
   },
   "keywords": [
     "telegram",
