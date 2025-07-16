@@ -371,4 +371,40 @@ async function start() {
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
+// Agregar estas líneas al principio del bot.js, después de los requires
+
+const http = require('http');
+
+// Después de la configuración, agregar:
+const PORT = process.env.PORT || 3000;
+
+// Crear servidor HTTP simple para mantener Railway activo
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('vMix Tally Bot is running!\n\nBot status: Active\nMonitoring vMix...');
+});
+
+// Iniciar servidor
+server.listen(PORT, () => {
+  console.log(`🌐 Servidor HTTP ejecutándose en puerto ${PORT}`);
+});
+
+// También modificar la función monitorVmix para más logs:
+async function monitorVmix() {
+  try {
+    const currentTally = await vmix.getTallyData();
+    
+    // Log para debugging - puedes ver esto en Railway logs
+    console.log(`📊 Tally check: Program=[${currentTally.program}] Preview=[${currentTally.preview}]`);
+    
+    if (Object.keys(previousTally).length > 0) {
+      await notifyTallyChanges(currentTally);
+    }
+    
+    previousTally = currentTally;
+  } catch (error) {
+    console.error('❌ Error monitoreando vMix:', error.message);
+  }
+}
+
 start();
