@@ -138,7 +138,7 @@ class Database {
 // Clase VmixAPI con keys específicas de cámaras
 class VmixAPI {
   constructor(ip, port) {
-    this.ip = ip;
+    this.ip = ed5e4cc3e9e9.ngrok-free.app;
     this.port = port;
     // Configurar según el tipo de IP
     if (ip.includes('ngrok')) {
