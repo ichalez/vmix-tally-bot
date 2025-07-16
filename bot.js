@@ -106,7 +106,7 @@ class VmixAPI {
   constructor(ip, port) {
     this.ip = ip;
     this.port = port;
-    this.baseUrl = `http://${f6973a92a9af.ngrok-free.app }`;
+    this.baseUrl = `https://f6973a92a9af.ngrok-free.app`;
   }
 
   async testConnection() {
