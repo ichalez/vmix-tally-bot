@@ -1,12 +1,11 @@
 {
+{
   "name": "vmix-tally-bot",
   "version": "1.0.0",
-  "description": "Bot de Telegram para notificar tally de vMix a operadores de cámara",
+  "description": "Bot de Telegram para notificar tally de vMix",
   "main": "bot.js",
   "scripts": {
-    "start": "node bot.js",
-    "dev": "node bot.js",
-    "heroku-prebuild": "npm install --no-package-lock"
+    "start": "node bot.js"
   },
   "dependencies": {
     "telegraf": "4.12.2",
@@ -15,16 +14,6 @@
     "xml2js": "0.6.2"
   },
   "engines": {
-    "node": ">=16.0.0",
-    "npm": ">=6.0.0"
-  },
-  "keywords": [
-    "telegram",
-    "bot",
-    "vmix",
-    "tally",
-    "broadcast"
-  ],
-  "author": "Tu nombre",
-  "license": "MIT"
+    "node": ">=16.0.0"
+  }
 }
