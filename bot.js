@@ -1,3 +1,4 @@
+
 const { Telegraf } = require('telegraf');
 const fetch = require('node-fetch');
 const { parseString } = require('xml2js');
@@ -140,6 +141,7 @@ class VmixAPI {
 
   async testConnection() {
     try {
+      console.log(`🔗 Probando conexión a ${this.baseUrl}/api/`);
       const response = await fetch(`${this.baseUrl}/api/`, { 
         timeout: 5000,
         headers: {
@@ -147,8 +149,10 @@ class VmixAPI {
         }
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      console.log('✅ Conexión exitosa');
       return true;
     } catch (error) {
+      console.error(`❌ Error de conexión: ${error.message}`);
       throw new Error(`No se puede conectar a vMix en ${this.ip} - ${error.message}`);
     }
   }
@@ -355,37 +359,51 @@ Si hay problemas, contacta al administrador.
   ctx.replyWithMarkdown(helpMessage);
 });
 
-// Monitoreo de cambios
+// Monitoreo de cambios con logs detallados
 async function notifyTallyChanges(currentTally) {
   try {
     const users = await db.getAllUsers();
+    console.log(`👥 Usuarios registrados: ${users.length}`);
     
     for (const user of users) {
       const cameraNum = user.camera_number;
       const wasOnAir = previousTally.program && previousTally.program.includes(cameraNum);
       const isOnAir = currentTally.program.includes(cameraNum);
       
+      console.log(`🎥 Cámara ${cameraNum} (@${user.username}): wasOnAir=${wasOnAir}, isOnAir=${isOnAir}`);
+      
       // Notificar cuando la cámara se activa
       if (!wasOnAir && isOnAir) {
-        await bot.telegram.sendMessage(user.user_id, '🔴 **TU CÁMARA ESTÁ EN AIRE**', {
-          parse_mode: 'Markdown'
-        });
-        console.log(`🔴 Notificado: Cámara ${cameraNum} ON AIR → @${user.username}`);
+        console.log(`🔴 ENVIANDO NOTIFICACIÓN: Cámara ${cameraNum} ON AIR → @${user.username}`);
+        try {
+          await bot.telegram.sendMessage(user.user_id, '🔴 **TU CÁMARA ESTÁ EN AIRE**', {
+            parse_mode: 'Markdown'
+          });
+          console.log(`✅ Notificación enviada a usuario ${user.user_id}`);
+        } catch (error) {
+          console.error(`❌ Error enviando notificación a ${user.user_id}:`, error);
+        }
       }
       
       // Notificar cuando la cámara se desactiva
       if (wasOnAir && !isOnAir) {
-        await bot.telegram.sendMessage(user.user_id, '⚫ Tu cámara ya no está en aire');
-        console.log(`⚫ Notificado: Cámara ${cameraNum} OFF → @${user.username}`);
+        console.log(`⚫ ENVIANDO NOTIFICACIÓN: Cámara ${cameraNum} OFF → @${user.username}`);
+        try {
+          await bot.telegram.sendMessage(user.user_id, '⚫ Tu cámara ya no está en aire');
+          console.log(`✅ Notificación OFF enviada a usuario ${user.user_id}`);
+        } catch (error) {
+          console.error(`❌ Error enviando notificación OFF a ${user.user_id}:`, error);
+        }
       }
     }
   } catch (error) {
-    console.error('Error notificando cambios:', error);
+    console.error('❌ Error notificando cambios:', error);
   }
 }
 
 // Función de monitoreo con logs detallados
 async function monitorVmix() {
+  console.log('🔄 Ejecutando monitorVmix...');
   try {
     const currentTally = await vmix.getTallyData();
     
@@ -394,12 +412,26 @@ async function monitorVmix() {
     
     // Verificar cambios y notificar
     if (Object.keys(previousTally).length > 0) {
+      console.log('🔄 Verificando cambios...');
       await notifyTallyChanges(currentTally);
+    } else {
+      console.log('⏳ Esperando estado inicial...');
     }
     
     previousTally = currentTally;
   } catch (error) {
     console.error('❌ Error monitoreando vMix:', error.message);
+  }
+}
+
+// Función de prueba para verificar que el monitoreo funciona
+async function testMonitoring() {
+  console.log('🧪 PRUEBA: Ejecutando monitoreo manual...');
+  try {
+    const tally = await vmix.getTallyData();
+    console.log(`🧪 PRUEBA: Tally obtenido: Program=[${tally.program.join(',')}] Preview=[${tally.preview.join(',')}]`);
+  } catch (error) {
+    console.log(`🧪 PRUEBA ERROR: ${error.message}`);
   }
 }
 
@@ -420,23 +452,39 @@ async function start() {
     await bot.launch();
     console.log('✅ Bot de Telegram iniciado');
     
-    // Iniciar monitoreo continuo
-    setInterval(monitorVmix, config.vmix.pollInterval);
+    // IMPORTANTE: Iniciar monitoreo continuo
+    console.log('🔄 Iniciando monitoreo...');
+    const monitorInterval = setInterval(monitorVmix, config.vmix.pollInterval);
     console.log(`🔍 Monitoreando tally cada ${config.vmix.pollInterval}ms`);
     
-    // Obtener estado inicial
+    // Verificar que el intervalo se creó
+    if (monitorInterval) {
+      console.log('✅ Intervalo de monitoreo creado exitosamente');
+    } else {
+      console.log('❌ ERROR: No se pudo crear el intervalo de monitoreo');
+    }
+    
+    // Obtener estado inicial después de 5 segundos
     setTimeout(async () => {
       try {
+        console.log('🎯 Obteniendo estado inicial...');
         const initialTally = await vmix.getTallyData();
         previousTally = initialTally;
         console.log(`🎯 Estado inicial: Program=[${initialTally.program.join(',')}] Preview=[${initialTally.preview.join(',')}]`);
       } catch (error) {
         console.error('❌ Error obteniendo estado inicial:', error);
       }
-    }, 2000);
+    }, 5000);
+    
+    // Prueba manual de monitoreo después de 10 segundos
+    setTimeout(() => {
+      console.log('🧪 Ejecutando prueba manual de monitoreo...');
+      testMonitoring();
+    }, 10000);
     
   } catch (error) {
     console.error('❌ Error al iniciar:', error);
+    console.error('❌ Stack trace:', error.stack);
     process.exit(1);
   }
 }
