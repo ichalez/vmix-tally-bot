@@ -158,62 +158,78 @@ class VmixAPI {
   }
 
   async getTallyData() {
-    try {
-      const response = await fetch(`${this.baseUrl}/api/`, { 
-        timeout: 5000,
-        headers: {
-          'ngrok-skip-browser-warning': 'true'
+  try {
+    const response = await fetch(`${this.baseUrl}/api/`, { 
+      timeout: 5000,
+      headers: {
+        'ngrok-skip-browser-warning': 'true'
+      }
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const xml = await response.text();
+    
+    // LOG DEL XML PARA DEBUGGING
+    console.log('📄 XML recibido de vMix (primeros 500 caracteres):');
+    console.log(xml.substring(0, 500));
+    
+    return new Promise((resolve, reject) => {
+      parseString(xml, (err, result) => {
+        if (err) {
+          reject(new Error(`Error parseando XML: ${err.message}`));
+          return;
         }
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const xml = await response.text();
-      
-      return new Promise((resolve, reject) => {
-        parseString(xml, (err, result) => {
-          if (err) {
-            reject(new Error(`Error parseando XML: ${err.message}`));
-            return;
-          }
-          
-          const vmix = result.vmix;
-          const program = [];
-          const preview = [];
-          
-          // Obtener input activo en programa
-          if (vmix.active && vmix.active[0]) {
-            const activeInput = parseInt(vmix.active[0]);
-            if (!isNaN(activeInput)) program.push(activeInput);
-          }
-          
-          // Obtener input en preview
-          if (vmix.preview && vmix.preview[0]) {
-            const previewInput = parseInt(vmix.preview[0]);
-            if (!isNaN(previewInput)) preview.push(previewInput);
-          }
-          
-          // Buscar overlays activos
-          if (vmix.overlays && vmix.overlays[0] && vmix.overlays[0].overlay) {
-            vmix.overlays[0].overlay.forEach(overlay => {
-              if (overlay.$ && overlay.$.number) {
-                const overlayInput = parseInt(overlay.$.number);
-                if (!isNaN(overlayInput) && !program.includes(overlayInput)) {
-                  program.push(overlayInput);
-                }
+        
+        // LOG DEL OBJETO PARSEADO
+        console.log('📊 Objeto vMix parseado:');
+        console.log('- Active:', result.vmix.active);
+        console.log('- Preview:', result.vmix.preview);
+        console.log('- Overlays:', result.vmix.overlays);
+        
+        const vmix = result.vmix;
+        const program = [];
+        const preview = [];
+        
+        // Obtener input activo en programa
+        if (vmix.active && vmix.active[0]) {
+          const activeInput = parseInt(vmix.active[0]);
+          console.log(`🎯 Input activo en programa: ${activeInput}`);
+          if (!isNaN(activeInput)) program.push(activeInput);
+        }
+        
+        // Obtener input en preview
+        if (vmix.preview && vmix.preview[0]) {
+          const previewInput = parseInt(vmix.preview[0]);
+          console.log(`👁️ Input en preview: ${previewInput}`);
+          if (!isNaN(previewInput)) preview.push(previewInput);
+        }
+        
+        // Buscar overlays activos
+        if (vmix.overlays && vmix.overlays[0] && vmix.overlays[0].overlay) {
+          console.log(`🔄 Overlays encontrados: ${vmix.overlays[0].overlay.length}`);
+          vmix.overlays[0].overlay.forEach(overlay => {
+            if (overlay.$ && overlay.$.number) {
+              const overlayInput = parseInt(overlay.$.number);
+              console.log(`📺 Overlay activo: Input ${overlayInput}`);
+              if (!isNaN(overlayInput) && !program.includes(overlayInput)) {
+                program.push(overlayInput);
               }
-            });
-          }
-          
-          resolve({
-            program: program,
-            preview: preview,
-            timestamp: Date.now()
+            }
           });
+        }
+        
+        console.log(`✅ RESULTADO FINAL: Program=[${program.join(',')}] Preview=[${preview.join(',')}]`);
+        
+        resolve({
+          program: program,
+          preview: preview,
+          timestamp: Date.now()
         });
       });
-    } catch (error) {
-      throw new Error(`Error obteniendo tally: ${error.message}`);
-    }
+    });
+  } catch (error) {
+    throw new Error(`Error obteniendo tally: ${error.message}`);
   }
+}
 }
 
 // Inicializar
