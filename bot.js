@@ -177,29 +177,57 @@ class VmixAPI {
   }
 
   // Función para obtener el estado de UNA cámara específica
-  async getCameraState(cameraNumber) {
-    try {
-      const key = this.cameraKeys[cameraNumber];
-      if (!key) {
-        throw new Error(`No hay key configurada para cámara ${cameraNumber}`);
-      }
-      
-      const response = await fetch(`${this.baseUrl}/tally/?key=${key}`, { 
-        timeout: 5000,
-        headers: {
-          'ngrok-skip-browser-warning': 'true'
-        }
-      });
-      
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const state = await response.text().trim();
-      
-      console.log(`📹 Cámara ${cameraNumber}: ${state} (${state === '1' ? 'PROGRAM' : state === '2' ? 'PREVIEW' : 'OFF'})`);
-      
-      return parseInt(state);
-    } catch (error) {
-      throw new Error(`Error obteniendo estado de cámara ${cameraNumber}: ${error.message}`);
+// Función para obtener el estado de UNA cámara específica
+async getCameraState(cameraNumber) {
+  try {
+    const key = this.cameraKeys[cameraNumber];
+    if (!key) {
+      throw new Error(`No hay key configurada para cámara ${cameraNumber}`);
     }
+    
+    const response = await fetch(`${this.baseUrl}/tally/?key=${key}`, { 
+      timeout: 5000,
+      headers: {
+        'ngrok-skip-browser-warning': 'true'
+      }
+    });
+    
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    
+    // Obtener la respuesta como texto
+    const responseText = await response.text();
+    console.log(`📱 Respuesta raw cámara ${cameraNumber}:`, JSON.stringify(responseText));
+    
+    // Limpiar la respuesta
+    let state = responseText;
+    
+    // Si es HTML, extraer el contenido
+    if (responseText.includes('<') && responseText.includes('>')) {
+      // Extraer solo el número del HTML
+      const match = responseText.match(/\b[0-2]\b/);
+      if (match) {
+        state = match[0];
+      } else {
+        throw new Error(`No se encontró estado válido en HTML: ${responseText}`);
+      }
+    } else {
+      // Si es texto plano, limpiar espacios y caracteres especiales
+      state = responseText.replace(/\s+/g, '').replace(/[^0-2]/g, '');
+    }
+    
+    console.log(`📹 Cámara ${cameraNumber}: ${state} (${state === '1' ? 'PROGRAM' : state === '2' ? 'PREVIEW' : 'OFF'})`);
+    
+    const stateNumber = parseInt(state);
+    if (isNaN(stateNumber) || stateNumber < 0 || stateNumber > 2) {
+      throw new Error(`Estado inválido: ${state}`);
+    }
+    
+    return stateNumber;
+  } catch (error) {
+    console.error(`❌ Error detallado cámara ${cameraNumber}:`, error);
+    throw new Error(`Error obteniendo estado de cámara ${cameraNumber}: ${error.message}`);
+  }
+}
   }
 
   // Función para obtener el estado de todas las cámaras
