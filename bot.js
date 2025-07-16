@@ -1,4 +1,3 @@
-
 const { Telegraf } = require('telegraf');
 const fetch = require('node-fetch');
 const { parseString } = require('xml2js');
@@ -29,6 +28,12 @@ Bot status: Active
 Monitoring vMix at: ${config.vmix.ip}
 Poll interval: ${config.vmix.pollInterval}ms
 Telegram token: ${config.telegram.token ? 'Configured' : 'Missing'}
+
+Camera Keys configured:
+- Camera 1: 8b615bc7-97ab-4f4f-99b2-add6701bd482
+- Camera 2: 635faf79-fcfb-4354-b2b1-6dce2e1448db
+- Camera 3: d449b257-9907-4621-b933-90553b1dc9bf
+- Camera 4: 20d4f6e4-709e-4590-a7cc-6d894f6340ee
 
 Bot commands:
 /start - Start the bot
@@ -130,13 +135,27 @@ class Database {
   }
 }
 
-// Clase VmixAPI simple
+// Clase VmixAPI con keys específicas de cámaras
 class VmixAPI {
   constructor(ip, port) {
     this.ip = ip;
     this.port = port;
-    // Para ngrok usamos HTTPS sin puerto
-    this.baseUrl = `https://${ip}`;
+    // Configurar según el tipo de IP
+    if (ip.includes('ngrok')) {
+      this.baseUrl = `https://${ip}`;
+    } else {
+      this.baseUrl = `http://${ip}:${port}`;
+    }
+    
+    // KEYS de las cámaras (obtenidas del HTML de vMix)
+    this.cameraKeys = {
+      1: '8b615bc7-97ab-4f4f-99b2-add6701bd482',  // camara 1
+      2: '635faf79-fcfb-4354-b2b1-6dce2e1448db',  // camara 2
+      3: 'd449b257-9907-4621-b933-90553b1dc9bf',  // Sample Input 1
+      4: '20d4f6e4-709e-4590-a7cc-6d894f6340ee'   // Sample Input 2
+    };
+    
+    console.log(`🔑 Keys de cámaras configuradas: ${Object.keys(this.cameraKeys).length} cámaras`);
   }
 
   async testConnection() {
@@ -157,79 +176,61 @@ class VmixAPI {
     }
   }
 
-  async getTallyData() {
-  try {
-    const response = await fetch(`${this.baseUrl}/api/`, { 
-      timeout: 5000,
-      headers: {
-        'ngrok-skip-browser-warning': 'true'
+  // Función para obtener el estado de UNA cámara específica
+  async getCameraState(cameraNumber) {
+    try {
+      const key = this.cameraKeys[cameraNumber];
+      if (!key) {
+        throw new Error(`No hay key configurada para cámara ${cameraNumber}`);
       }
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const xml = await response.text();
-    
-    // LOG DEL XML PARA DEBUGGING
-    console.log('📄 XML recibido de vMix (primeros 500 caracteres):');
-    console.log(xml.substring(0, 500));
-    
-    return new Promise((resolve, reject) => {
-      parseString(xml, (err, result) => {
-        if (err) {
-          reject(new Error(`Error parseando XML: ${err.message}`));
-          return;
+      
+      const response = await fetch(`${this.baseUrl}/tally/?key=${key}`, { 
+        timeout: 5000,
+        headers: {
+          'ngrok-skip-browser-warning': 'true'
         }
-        
-        // LOG DEL OBJETO PARSEADO
-        console.log('📊 Objeto vMix parseado:');
-        console.log('- Active:', result.vmix.active);
-        console.log('- Preview:', result.vmix.preview);
-        console.log('- Overlays:', result.vmix.overlays);
-        
-        const vmix = result.vmix;
-        const program = [];
-        const preview = [];
-        
-        // Obtener input activo en programa
-        if (vmix.active && vmix.active[0]) {
-          const activeInput = parseInt(vmix.active[0]);
-          console.log(`🎯 Input activo en programa: ${activeInput}`);
-          if (!isNaN(activeInput)) program.push(activeInput);
-        }
-        
-        // Obtener input en preview
-        if (vmix.preview && vmix.preview[0]) {
-          const previewInput = parseInt(vmix.preview[0]);
-          console.log(`👁️ Input en preview: ${previewInput}`);
-          if (!isNaN(previewInput)) preview.push(previewInput);
-        }
-        
-        // Buscar overlays activos
-        if (vmix.overlays && vmix.overlays[0] && vmix.overlays[0].overlay) {
-          console.log(`🔄 Overlays encontrados: ${vmix.overlays[0].overlay.length}`);
-          vmix.overlays[0].overlay.forEach(overlay => {
-            if (overlay.$ && overlay.$.number) {
-              const overlayInput = parseInt(overlay.$.number);
-              console.log(`📺 Overlay activo: Input ${overlayInput}`);
-              if (!isNaN(overlayInput) && !program.includes(overlayInput)) {
-                program.push(overlayInput);
-              }
-            }
-          });
-        }
-        
-        console.log(`✅ RESULTADO FINAL: Program=[${program.join(',')}] Preview=[${preview.join(',')}]`);
-        
-        resolve({
-          program: program,
-          preview: preview,
-          timestamp: Date.now()
-        });
       });
-    });
-  } catch (error) {
-    throw new Error(`Error obteniendo tally: ${error.message}`);
+      
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const state = await response.text().trim();
+      
+      console.log(`📹 Cámara ${cameraNumber}: ${state} (${state === '1' ? 'PROGRAM' : state === '2' ? 'PREVIEW' : 'OFF'})`);
+      
+      return parseInt(state);
+    } catch (error) {
+      throw new Error(`Error obteniendo estado de cámara ${cameraNumber}: ${error.message}`);
+    }
   }
-}
+
+  // Función para obtener el estado de todas las cámaras
+  async getTallyData() {
+    try {
+      const program = [];
+      const preview = [];
+      
+      // Consultar solo las cámaras configuradas (1, 2, 3, 4)
+      for (const [cameraNumber, key] of Object.entries(this.cameraKeys)) {
+        const state = await this.getCameraState(parseInt(cameraNumber));
+        
+        if (state === 1) {
+          program.push(parseInt(cameraNumber));
+        } else if (state === 2) {
+          preview.push(parseInt(cameraNumber));
+        }
+      }
+      
+      console.log(`✅ RESULTADO FINAL: Program=[${program.join(',')}] Preview=[${preview.join(',')}]`);
+      
+      return {
+        program: program,
+        preview: preview,
+        timestamp: Date.now()
+      };
+      
+    } catch (error) {
+      throw new Error(`Error obteniendo tally: ${error.message}`);
+    }
+  }
 }
 
 // Inicializar
@@ -247,11 +248,17 @@ bot.start((ctx) => {
 ¡Hola! Soy tu asistente para notificaciones de tally.
 
 **Comandos disponibles:**
-/camara [número] - Asignar tu cámara (ej: /camara 3)
+/camara [número] - Asignar tu cámara (ej: /camara 1)
 /estado - Ver estado actual de tu cámara
 /todas - Ver estado de todas las cámaras
 /salir - Dejar de recibir notificaciones
 /ayuda - Mostrar esta ayuda
+
+**Cámaras disponibles:**
+- Cámara 1: camara 1
+- Cámara 2: camara 2  
+- Cámara 3: Sample Input 1
+- Cámara 4: Sample Input 2
 
 **Para empezar:**
 Usa /camara seguido del número de tu cámara.
@@ -266,13 +273,13 @@ bot.command('camara', async (ctx) => {
   const args = ctx.message.text.split(' ');
   
   if (args.length < 2) {
-    return ctx.reply('❌ Por favor especifica el número de cámara.\nEjemplo: /camara 3');
+    return ctx.reply('❌ Por favor especifica el número de cámara.\nEjemplo: /camara 1\n\nCámaras disponibles: 1, 2, 3, 4');
   }
   
   const cameraNumber = parseInt(args[1]);
   
-  if (isNaN(cameraNumber) || cameraNumber < 1 || cameraNumber > 20) {
-    return ctx.reply('❌ Número de cámara inválido. Usa un número entre 1 y 20.');
+  if (isNaN(cameraNumber) || cameraNumber < 1 || cameraNumber > 4) {
+    return ctx.reply('❌ Número de cámara inválido.\nCámaras disponibles: 1, 2, 3, 4');
   }
   
   try {
@@ -282,7 +289,16 @@ bot.command('camara', async (ctx) => {
     }
     
     await db.assignCamera(userId, username, cameraNumber);
-    ctx.reply(`✅ Cámara ${cameraNumber} asignada correctamente.\n🔔 Recibirás notificaciones cuando esté en aire.`);
+    
+    // Obtener el nombre de la cámara
+    const cameraNames = {
+      1: 'camara 1',
+      2: 'camara 2',
+      3: 'Sample Input 1',
+      4: 'Sample Input 2'
+    };
+    
+    ctx.reply(`✅ Cámara ${cameraNumber} (${cameraNames[cameraNumber]}) asignada correctamente.\n🔔 Recibirás notificaciones cuando esté en aire.`);
     
     console.log(`👤 Usuario @${username} asignado a cámara ${cameraNumber}`);
   } catch (error) {
@@ -297,18 +313,23 @@ bot.command('estado', async (ctx) => {
   try {
     const user = await db.getUserById(userId);
     if (!user) {
-      return ctx.reply('❌ No tienes una cámara asignada.\nUsa /camara [número] para asignar una.');
+      return ctx.reply('❌ No tienes una cámara asignada.\nUsa /camara [número] para asignar una.\n\nCámaras disponibles: 1, 2, 3, 4');
     }
     
-    const tally = await vmix.getTallyData();
-    const isOnAir = tally.program.includes(user.camera_number);
-    const isPreview = tally.preview.includes(user.camera_number);
+    const state = await vmix.getCameraState(user.camera_number);
     
     let status = '⚫ OFF';
-    if (isOnAir) status = '🔴 ON AIR';
-    else if (isPreview) status = '🟡 PREVIEW';
+    if (state === 1) status = '🔴 ON AIR';
+    else if (state === 2) status = '🟡 PREVIEW';
     
-    ctx.reply(`📹 **Cámara ${user.camera_number}**\n${status}`);
+    const cameraNames = {
+      1: 'camara 1',
+      2: 'camara 2',
+      3: 'Sample Input 1',
+      4: 'Sample Input 2'
+    };
+    
+    ctx.reply(`📹 **Cámara ${user.camera_number}** (${cameraNames[user.camera_number]})\n${status}`);
   } catch (error) {
     console.error('Error obteniendo estado:', error);
     ctx.reply('❌ Error al consultar el estado. Verifica la conexión con vMix.');
@@ -320,7 +341,14 @@ bot.command('todas', async (ctx) => {
     const tally = await vmix.getTallyData();
     let message = '📊 **Estado de todas las cámaras:**\n\n';
     
-    for (let i = 1; i <= 8; i++) {
+    const cameraNames = {
+      1: 'camara 1',
+      2: 'camara 2',
+      3: 'Sample Input 1',
+      4: 'Sample Input 2'
+    };
+    
+    for (let i = 1; i <= 4; i++) {
       const isOnAir = tally.program.includes(i);
       const isPreview = tally.preview.includes(i);
       
@@ -328,7 +356,7 @@ bot.command('todas', async (ctx) => {
       if (isOnAir) status = '🔴';
       else if (isPreview) status = '🟡';
       
-      message += `Cámara ${i}: ${status}\n`;
+      message += `Cámara ${i} (${cameraNames[i]}): ${status}\n`;
     }
     
     ctx.replyWithMarkdown(message);
@@ -355,13 +383,19 @@ bot.command('ayuda', (ctx) => {
 🎥 **vMix Tally Bot - Ayuda**
 
 **Comandos:**
-/camara [número] - Asignar tu cámara
+/camara [número] - Asignar tu cámara (1-4)
 /estado - Ver estado de tu cámara
 /todas - Ver todas las cámaras
 /salir - Dejar de recibir notificaciones
 
+**Cámaras disponibles:**
+- Cámara 1: camara 1
+- Cámara 2: camara 2
+- Cámara 3: Sample Input 1
+- Cámara 4: Sample Input 2
+
 **Ejemplos:**
-\`/camara 3\` - Te asigna la cámara 3
+\`/camara 1\` - Te asigna la cámara 1
 \`/estado\` - Ve si tu cámara está en aire
 
 **Estados:**
@@ -423,9 +457,6 @@ async function monitorVmix() {
   try {
     const currentTally = await vmix.getTallyData();
     
-    // Log detallado para debugging
-    console.log(`📊 Tally check: Program=[${currentTally.program.join(',')}] Preview=[${currentTally.preview.join(',')}]`);
-    
     // Verificar cambios y notificar
     if (Object.keys(previousTally).length > 0) {
       console.log('🔄 Verificando cambios...');
@@ -486,7 +517,7 @@ async function start() {
         console.log('🎯 Obteniendo estado inicial...');
         const initialTally = await vmix.getTallyData();
         previousTally = initialTally;
-        console.log(`🎯 Estado inicial: Program=[${initialTally.program.join(',')}] Preview=[${initialTally.preview.join(',')}]`);
+        console.log(`🎯 Estado inicial obtenido correctamente`);
       } catch (error) {
         console.error('❌ Error obteniendo estado inicial:', error);
       }
