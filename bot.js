@@ -12,7 +12,7 @@ const config = {
     token: process.env.TELEGRAM_TOKEN || '7809887342:AAELfj3I8VNBDoI2oZ9KZuh8RfK-plJ9sOM'
   },
   vmix: {
-    ip: process.env.VMIX_IP || 'f6973a92a9af.ngrok-free.app',
+    ip: process.env.VMIX_IP || '7b1174631c91.ngrok-free.app',
     port: process.env.VMIX_PORT || '8088',
     pollInterval: parseInt(process.env.POLL_INTERVAL) || 1000
   }
