@@ -3,6 +3,7 @@ const fetch = require('node-fetch');
 const { parseString } = require('xml2js');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const http = require('http');
 
 // Configuración
 const config = {
@@ -10,11 +11,38 @@ const config = {
     token: process.env.TELEGRAM_TOKEN || '7809887342:AAELfj3I8VNBDoI2oZ9KZuh8RfK-plJ9sOM'
   },
   vmix: {
-    ip: process.env.VMIX_IP || '192.168.1.100',
+    ip: process.env.VMIX_IP || 'f6973a92a9af.ngrok-free.app',
     port: process.env.VMIX_PORT || '8088',
     pollInterval: parseInt(process.env.POLL_INTERVAL) || 1000
   }
 };
+
+const PORT = process.env.PORT || 3000;
+
+// Crear servidor HTTP simple para mantener Railway activo
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end(`vMix Tally Bot is running!
+
+Bot status: Active
+Monitoring vMix at: ${config.vmix.ip}
+Poll interval: ${config.vmix.pollInterval}ms
+Telegram token: ${config.telegram.token ? 'Configured' : 'Missing'}
+
+Bot commands:
+/start - Start the bot
+/camara [number] - Assign camera
+/estado - Check camera status
+/todas - Show all cameras
+/salir - Stop notifications
+/ayuda - Show help
+`);
+});
+
+// Iniciar servidor
+server.listen(PORT, () => {
+  console.log(`🌐 Servidor HTTP ejecutándose en puerto ${PORT}`);
+});
 
 // Clase Database simple
 class Database {
@@ -106,22 +134,33 @@ class VmixAPI {
   constructor(ip, port) {
     this.ip = ip;
     this.port = port;
-    this.baseUrl = `https://f6973a92a9af.ngrok-free.app`;
+    // Para ngrok usamos HTTPS sin puerto
+    this.baseUrl = `https://${ip}`;
   }
 
   async testConnection() {
     try {
-      const response = await fetch(`${this.baseUrl}/api/`, { timeout: 5000 });
+      const response = await fetch(`${this.baseUrl}/api/`, { 
+        timeout: 5000,
+        headers: {
+          'ngrok-skip-browser-warning': 'true'
+        }
+      });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return true;
     } catch (error) {
-      throw new Error(`No se puede conectar a vMix en ${this.ip}:${this.port} - ${error.message}`);
+      throw new Error(`No se puede conectar a vMix en ${this.ip} - ${error.message}`);
     }
   }
 
   async getTallyData() {
     try {
-      const response = await fetch(`${this.baseUrl}/api/`, { timeout: 5000 });
+      const response = await fetch(`${this.baseUrl}/api/`, { 
+        timeout: 5000,
+        headers: {
+          'ngrok-skip-browser-warning': 'true'
+        }
+      });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const xml = await response.text();
       
@@ -146,6 +185,18 @@ class VmixAPI {
           if (vmix.preview && vmix.preview[0]) {
             const previewInput = parseInt(vmix.preview[0]);
             if (!isNaN(previewInput)) preview.push(previewInput);
+          }
+          
+          // Buscar overlays activos
+          if (vmix.overlays && vmix.overlays[0] && vmix.overlays[0].overlay) {
+            vmix.overlays[0].overlay.forEach(overlay => {
+              if (overlay.$ && overlay.$.number) {
+                const overlayInput = parseInt(overlay.$.number);
+                if (!isNaN(overlayInput) && !program.includes(overlayInput)) {
+                  program.push(overlayInput);
+                }
+              }
+            });
           }
           
           resolve({
@@ -314,6 +365,7 @@ async function notifyTallyChanges(currentTally) {
       const wasOnAir = previousTally.program && previousTally.program.includes(cameraNum);
       const isOnAir = currentTally.program.includes(cameraNum);
       
+      // Notificar cuando la cámara se activa
       if (!wasOnAir && isOnAir) {
         await bot.telegram.sendMessage(user.user_id, '🔴 **TU CÁMARA ESTÁ EN AIRE**', {
           parse_mode: 'Markdown'
@@ -321,6 +373,7 @@ async function notifyTallyChanges(currentTally) {
         console.log(`🔴 Notificado: Cámara ${cameraNum} ON AIR → @${user.username}`);
       }
       
+      // Notificar cuando la cámara se desactiva
       if (wasOnAir && !isOnAir) {
         await bot.telegram.sendMessage(user.user_id, '⚫ Tu cámara ya no está en aire');
         console.log(`⚫ Notificado: Cámara ${cameraNum} OFF → @${user.username}`);
@@ -331,72 +384,15 @@ async function notifyTallyChanges(currentTally) {
   }
 }
 
+// Función de monitoreo con logs detallados
 async function monitorVmix() {
   try {
     const currentTally = await vmix.getTallyData();
     
-    if (Object.keys(previousTally).length > 0) {
-      await notifyTallyChanges(currentTally);
-    }
+    // Log detallado para debugging
+    console.log(`📊 Tally check: Program=[${currentTally.program.join(',')}] Preview=[${currentTally.preview.join(',')}]`);
     
-    previousTally = currentTally;
-  } catch (error) {
-    console.error('Error monitoreando vMix:', error.message);
-  }
-}
-
-// Iniciar aplicación
-async function start() {
-  try {
-    console.log('🚀 Iniciando vMix Tally Bot...');
-    
-    await db.init();
-    console.log('✅ Base de datos inicializada');
-    
-    await vmix.testConnection();
-    console.log(`✅ Conectado a vMix en ${config.vmix.ip}:${config.vmix.port}`);
-    
-    await bot.launch();
-    console.log('✅ Bot de Telegram iniciado');
-    
-    setInterval(monitorVmix, config.vmix.pollInterval);
-    console.log(`🔍 Monitoreando tally cada ${config.vmix.pollInterval}ms`);
-    
-  } catch (error) {
-    console.error('❌ Error al iniciar:', error);
-    process.exit(1);
-  }
-}
-
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
-
-// Agregar estas líneas al principio del bot.js, después de los requires
-
-const http = require('http');
-
-// Después de la configuración, agregar:
-const PORT = process.env.PORT || 3000;
-
-// Crear servidor HTTP simple para mantener Railway activo
-const server = http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('vMix Tally Bot is running!\n\nBot status: Active\nMonitoring vMix...');
-});
-
-// Iniciar servidor
-server.listen(PORT, () => {
-  console.log(`🌐 Servidor HTTP ejecutándose en puerto ${PORT}`);
-});
-
-// También modificar la función monitorVmix para más logs:
-async function monitorVmix() {
-  try {
-    const currentTally = await vmix.getTallyData();
-    
-    // Log para debugging - puedes ver esto en Railway logs
-    console.log(`📊 Tally check: Program=[${currentTally.program}] Preview=[${currentTally.preview}]`);
-    
+    // Verificar cambios y notificar
     if (Object.keys(previousTally).length > 0) {
       await notifyTallyChanges(currentTally);
     }
@@ -407,4 +403,47 @@ async function monitorVmix() {
   }
 }
 
+// Iniciar aplicación
+async function start() {
+  try {
+    console.log('🚀 Iniciando vMix Tally Bot...');
+    
+    // Inicializar base de datos
+    await db.init();
+    console.log('✅ Base de datos inicializada');
+    
+    // Probar conexión con vMix
+    await vmix.testConnection();
+    console.log(`✅ Conectado a vMix en ${config.vmix.ip}`);
+    
+    // Iniciar bot de Telegram
+    await bot.launch();
+    console.log('✅ Bot de Telegram iniciado');
+    
+    // Iniciar monitoreo continuo
+    setInterval(monitorVmix, config.vmix.pollInterval);
+    console.log(`🔍 Monitoreando tally cada ${config.vmix.pollInterval}ms`);
+    
+    // Obtener estado inicial
+    setTimeout(async () => {
+      try {
+        const initialTally = await vmix.getTallyData();
+        previousTally = initialTally;
+        console.log(`🎯 Estado inicial: Program=[${initialTally.program.join(',')}] Preview=[${initialTally.preview.join(',')}]`);
+      } catch (error) {
+        console.error('❌ Error obteniendo estado inicial:', error);
+      }
+    }, 2000);
+    
+  } catch (error) {
+    console.error('❌ Error al iniciar:', error);
+    process.exit(1);
+  }
+}
+
+// Manejo de cierre graceful
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
+
+// Iniciar aplicación
 start();
