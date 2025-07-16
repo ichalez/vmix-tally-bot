@@ -1,19 +1,14 @@
 {
-{
   "name": "vmix-tally-bot",
   "version": "1.0.0",
-  "description": "Bot de Telegram para notificar tally de vMix",
-  "main": "bot.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node bot.js"
+    "start": "node index.js"
   },
   "dependencies": {
-    "telegraf": "4.12.2",
-    "node-fetch": "2.7.0",
-    "sqlite3": "5.1.6",
-    "xml2js": "0.6.2"
-  },
-  "engines": {
-    "node": ">=16.0.0"
+    "telegraf": "^4.12.2",
+    "node-fetch": "^2.7.0",
+    "sqlite3": "^5.1.6",
+    "xml2js": "^0.6.2"
   }
 }
