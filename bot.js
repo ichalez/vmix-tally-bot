@@ -178,46 +178,45 @@ class VmixAPI {
 
   // Función para obtener el estado de UNA cámara específica
   async getCameraState(cameraNumber) {
-  try {
-    const key = this.cameraKeys[cameraNumber];
-    if (!key) {
-      throw new Error(`No hay key configurada para cámara ${cameraNumber}`);
-    }
-    
-    // USAR /tallyupdate/ en lugar de /tally/
-    const response = await fetch(`${this.baseUrl}/tallyupdate/?key=${key}`, { 
-      timeout: 5000,
-      headers: {
-        'ngrok-skip-browser-warning': 'true'
+    try {
+      const key = this.cameraKeys[cameraNumber];
+      if (!key) {
+        throw new Error(`No hay key configurada para cámara ${cameraNumber}`);
       }
-    });
-    
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    
-    const responseText = await response.text();
-    console.log(`📱 Respuesta raw cámara ${cameraNumber}:`, JSON.stringify(responseText));
-    
-    // El endpoint /tallyupdate/ devuelve JavaScript: tallyChange("#FF0000") para rojo
-    // tallyChange("#FFFF00") para amarillo, tallyChange("#000000") para off
-    
-    let state = 0; // Default OFF
-    
-    if (responseText.includes('#FF0000') || responseText.includes('#ff0000')) {
-      state = 1; // PROGRAM (rojo)
-    } else if (responseText.includes('#FFFF00') || responseText.includes('#ffff00')) {
-      state = 2; // PREVIEW (amarillo)
-    } else if (responseText.includes('#000000')) {
-      state = 0; // OFF (negro)
+      
+      // USAR /tallyupdate/ en lugar de /tally/
+      const response = await fetch(`${this.baseUrl}/tallyupdate/?key=${key}`, { 
+        timeout: 5000,
+        headers: {
+          'ngrok-skip-browser-warning': 'true'
+        }
+      });
+      
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      
+      const responseText = await response.text();
+      console.log(`📱 Respuesta raw cámara ${cameraNumber}:`, JSON.stringify(responseText.substring(0, 100)));
+      
+      // El endpoint /tallyupdate/ devuelve JavaScript: tallyChange("#FF0000") para rojo
+      // tallyChange("#FFFF00") para amarillo, tallyChange("#000000") para off
+      
+      let state = 0; // Default OFF
+      
+      if (responseText.includes('#FF0000') || responseText.includes('#ff0000')) {
+        state = 1; // PROGRAM (rojo)
+      } else if (responseText.includes('#FFFF00') || responseText.includes('#ffff00')) {
+        state = 2; // PREVIEW (amarillo)
+      } else if (responseText.includes('#000000')) {
+        state = 0; // OFF (negro)
+      }
+      
+      console.log(`📹 Cámara ${cameraNumber}: ${state} (${state === 1 ? 'PROGRAM' : state === 2 ? 'PREVIEW' : 'OFF'})`);
+      
+      return state;
+    } catch (error) {
+      console.error(`❌ Error detallado cámara ${cameraNumber}:`, error);
+      throw new Error(`Error obteniendo estado de cámara ${cameraNumber}: ${error.message}`);
     }
-    
-    console.log(`📹 Cámara ${cameraNumber}: ${state} (${state === 1 ? 'PROGRAM' : state === 2 ? 'PREVIEW' : 'OFF'})`);
-    
-    return state;
-  } catch (error) {
-    console.error(`❌ Error detallado cámara ${cameraNumber}:`, error);
-    throw new Error(`Error obteniendo estado de cámara ${cameraNumber}: ${error.message}`);
-  }
-}
   }
 
   // Función para obtener el estado de todas las cámaras
